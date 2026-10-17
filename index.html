@@ -50,23 +50,22 @@ h1{font-family:var(--display);font-weight:700;font-size:clamp(34px,10vw,48px);le
 .testing .arc:nth-of-type(5){animation-delay:.48s}
 @keyframes ping{0%,100%{opacity:.25}40%{opacity:1}}
 
-.result{text-align:center;margin-top:6px;min-height:118px}
+.result{text-align:center;margin-top:6px;min-height:128px}
 .score{font-family:var(--display);font-weight:700;font-size:56px;line-height:1;color:var(--tone,var(--fg));transition:color .45s ease}
 .verdict{font-size:20px;font-weight:600;margin:10px 0 0}
-.status{color:var(--muted);margin:6px 0 0;font-size:15px;min-height:22px}
+.status{color:var(--muted);margin:6px 0 0;font-size:15px;min-height:22px;line-height:1.4}
 
 button.go{margin-top:22px;font:600 17px/1 var(--body);background:var(--accent);color:var(--on-accent);border:0;border-radius:999px;padding:18px 34px;min-width:230px;cursor:pointer;transition:transform .12s ease,opacity .2s ease}
 button.go:active{transform:scale(.97)}
 button.go:disabled{opacity:.6;cursor:default}
 button.go:focus-visible{outline:3px solid var(--fg);outline-offset:3px}
 
-.stats{display:grid;grid-template-columns:repeat(3,1fr);width:100%;margin-top:34px;border-top:1px solid var(--line)}
-.stat{padding:16px 6px 0;text-align:center}
-.stat+.stat{border-left:1px solid var(--line)}
-.stat b{display:block;font-family:var(--display);font-weight:500;font-size:19px;letter-spacing:-.01em}
-.stat span{display:block;color:var(--muted);font-size:13px;margin-top:6px}
-.net{color:var(--muted);font-size:14px;margin:22px 0 0;text-align:center;min-height:20px}
-.note{color:var(--muted);font-size:13px;line-height:1.5;margin:14px 0 0;text-align:center;max-width:36ch}
+.stats{display:grid;grid-template-columns:repeat(3,1fr);width:100%;margin-top:34px}
+.stat{padding:16px 4px;text-align:center;border-top:1px solid var(--line)}
+.stat:not(:nth-child(3n+1)){border-left:1px solid var(--line)}
+.stat b{display:block;font-family:var(--display);font-weight:500;font-size:20px;letter-spacing:-.01em}
+.stat span{display:block;color:var(--muted);font-size:12.5px;margin-top:6px;line-height:1.3}
+.note{color:var(--muted);font-size:13px;line-height:1.5;margin:18px 0 0;text-align:center;max-width:38ch}
 @media (prefers-reduced-motion:reduce){.testing .arc{animation:none;opacity:.7}.arc,.dot,.score{transition:none}}
 </style>
 </head>
@@ -88,133 +87,172 @@ button.go:focus-visible{outline:3px solid var(--fg);outline-offset:3px}
   <button class="go" id="go" type="button">Проверить сигнал</button>
 
   <div class="stats">
-    <div class="stat"><b id="sPing">—</b><span>Отклик</span></div>
-    <div class="stat"><b id="sSpeed">—</b><span>Скорость</span></div>
-    <div class="stat"><b id="sJit">—</b><span>Стабильность</span></div>
+    <div class="stat"><b id="sDown">—</b><span>Скачивание, Мбит/с</span></div>
+    <div class="stat"><b id="sUp">—</b><span>Загрузка, Мбит/с</span></div>
+    <div class="stat"><b id="sPing">—</b><span>Отклик, мс</span></div>
+    <div class="stat"><b id="sJit">—</b><span>Джиттер, мс</span></div>
+    <div class="stat"><b id="sLoss">—</b><span>Потери, %</span></div>
+    <div class="stat"><b id="sNet">—</b><span>Тип сети</span></div>
   </div>
-  <p class="net" id="net"></p>
-  <p class="note">Это быстрая оценка: измерение идёт через небольшие загрузки с публичного сервера, поэтому цифры приблизительные.</p>
+  <p class="note">Тест использует серверы Cloudflare и может израсходовать до 100 МБ трафика. На мобильном интернете учитывайте это.</p>
 </main>
 
 <script>
 (function(){
   var $=function(id){return document.getElementById(id)};
-  var svg=$('svg'),arcs=[];
-  var NS='http://www.w3.org/2000/svg',cx=100,cy=112,ang=56*Math.PI/180;
+  var svg=$('svg'),arcs=[],NS='http://www.w3.org/2000/svg',cx=100,cy=112,ang=56*Math.PI/180;
   [22,42,62,82,102].forEach(function(r){
-    var p=document.createElementNS(NS,'path');
-    var dx=r*Math.sin(ang),dy=r*Math.cos(ang);
+    var p=document.createElementNS(NS,'path'),dx=r*Math.sin(ang),dy=r*Math.cos(ang);
     p.setAttribute('d','M'+(cx-dx).toFixed(1)+' '+(cy-dy).toFixed(1)+' A'+r+' '+r+' 0 0 1 '+(cx+dx).toFixed(1)+' '+(cy-dy).toFixed(1));
-    p.setAttribute('class','arc');
-    svg.appendChild(p);arcs.push(p);
+    p.setAttribute('class','arc');svg.appendChild(p);arcs.push(p);
   });
   var dot=document.createElementNS(NS,'circle');
   dot.setAttribute('cx',cx);dot.setAttribute('cy',cy);dot.setAttribute('r',8);dot.setAttribute('class','dot');
   svg.appendChild(dot);
 
-  var JQ='https://cdnjs.cloudflare.com/ajax/libs/jquery/3.7.1/jquery.min.js';
-  var TH='https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js';
-  var seq=0;
+  var CF='https://speed.cloudflare.com';
+  var gauge=$('gauge'),btn=$('go');
 
-  function load(url){
-    return new Promise(function(res,rej){
-      var u=url+'?s='+Date.now()+'_'+(seq++),s=document.createElement('script'),t0=performance.now();
-      var to=setTimeout(function(){s.remove();rej(new Error('timeout'))},15000);
-      s.onload=function(){
-        var t1=performance.now(),e=null;
-        clearTimeout(to);
-        try{var l=performance.getEntriesByName(u);e=l[l.length-1]||null}catch(_){}
-        s.remove();
-        res({
-          ms:t1-t0,
-          bytes:e?(e.encodedBodySize||e.transferSize||0):0,
-          ttfb:(e&&e.responseStart>0&&e.requestStart>0)?e.responseStart-e.requestStart:0
-        });
-      };
-      s.onerror=function(){clearTimeout(to);s.remove();rej(new Error('error'))};
-      s.src=u;document.head.appendChild(s);
-    });
-  }
+  var conn=navigator.connection||navigator.mozConnection||navigator.webkitConnection;
+  $('sNet').textContent=(conn&&conn.effectiveType)?conn.effectiveType.toUpperCase():'—';
 
   function clamp(v){return Math.max(0,Math.min(100,v))}
-  function tone(score){return score>=65?'var(--ok)':score>=35?'var(--mid)':'var(--bad)'}
-  function verdictFor(score){
-    return score>=80?'Отличный сигнал':score>=60?'Хороший сигнал':score>=35?'Средний сигнал':'Слабый сигнал';
+  function fmt(v){return v>=100?String(Math.round(v)):v>=10?v.toFixed(1):v.toFixed(2)}
+  function tone(s){return s>=65?'var(--ok)':s>=35?'var(--mid)':'var(--bad)'}
+  function verdict(s){return s>=80?'Отличный сигнал':s>=60?'Хороший сигнал':s>=35?'Средний сигнал':'Слабый сигнал'}
+  function advice(s){
+    return s>=80?'Подойдёт для видеозвонков, игр и видео в 4K.':
+           s>=60?'Видеозвонки и видео в HD пройдут без проблем.':
+           s>=35?'Сайты и музыка работают, видео может подтормаживать.':
+                 'Возможны зависания даже на простых сайтах.';
   }
   function paint(score,lit){
     var t=score==null?'':tone(score);
-    $('gauge').style.setProperty('--tone',t||'var(--accent)');
+    gauge.style.setProperty('--tone',t||'var(--accent)');
     $('score').style.setProperty('--tone',t||'var(--fg)');
     arcs.forEach(function(a,i){a.classList.toggle('lit',i<lit)});
   }
-  function reset(){
-    $('sPing').textContent='—';$('sSpeed').textContent='—';$('sJit').textContent='—';
+  function reset(){['sDown','sUp','sPing','sJit','sLoss'].forEach(function(id){$(id).textContent='—'})}
+  function median(a){var s=a.slice().sort(function(x,y){return x-y}),m=s.length>>1;return s.length%2?s[m]:(s[m-1]+s[m])/2}
+  function guard(ms){var c=new AbortController(),t=setTimeout(function(){c.abort()},ms);return{signal:c.signal,done:function(){clearTimeout(t)}}}
+
+  async function pingOnce(){
+    var g=guard(3000),t0=performance.now();
+    try{
+      var r=await fetch(CF+'/__down?bytes=0&r='+Math.random(),{cache:'no-store',signal:g.signal});
+      await r.arrayBuffer();
+      return performance.now()-t0;
+    }catch(e){return null}finally{g.done()}
   }
 
-  var net=navigator.connection||navigator.mozConnection||navigator.webkitConnection;
-  if(net&&net.effectiveType){
-    $('net').textContent='Тип сети по данным браузера: '+net.effectiveType.toUpperCase();
+  async function download(bytes,onChunk){
+    var g=guard(25000),t0=performance.now();
+    try{
+      var r=await fetch(CF+'/__down?bytes='+bytes+'&r='+Math.random(),{cache:'no-store',signal:g.signal});
+      var rd=r.body.getReader(),got=0;
+      for(;;){var x=await rd.read();if(x.done)break;got+=x.value.length;if(onChunk)onChunk(x.value.length)}
+      return{got:got,t0:t0,t1:performance.now()};
+    }finally{g.done()}
   }
 
-  var btn=$('go');
+  async function upload(bytes){
+    var g=guard(25000),t0=performance.now();
+    try{
+      var r=await fetch(CF+'/__up',{method:'POST',body:new Blob([new Uint8Array(bytes)]),cache:'no-store',signal:g.signal});
+      await r.arrayBuffer();
+      return{got:bytes,t0:t0,t1:performance.now()};
+    }finally{g.done()}
+  }
+
+  function mbps(parts,lat){
+    var bytes=0,a=Infinity,b=0;
+    parts.forEach(function(p){bytes+=p.got;a=Math.min(a,p.t0);b=Math.max(b,p.t1)});
+    var sec=Math.max(0.02,(b-a-lat)/1000);
+    return bytes*8/sec/1e6;
+  }
+
   btn.addEventListener('click',run);
 
   async function run(){
-    btn.disabled=true;
-    reset();paint(null,0);
-    $('score').textContent='…';
-    $('verdict').textContent='Измеряю';
-    if(navigator.onLine===false){
-      finishOffline();return;
-    }
-    svg.parentNode.classList.add('testing');
+    btn.disabled=true;reset();paint(null,0);
+    $('score').textContent='…';$('verdict').textContent='Измеряю';$('status').textContent='';
+    if(navigator.onLine===false){fail('Устройство не подключено к сети. Включите Wi-Fi или мобильные данные.');return}
+    gauge.classList.add('testing');
     try{
-      $('status').textContent='Прогреваю соединение…';
-      await load(JQ);
-      var pings=[];
-      for(var i=1;i<=4;i++){
-        $('status').textContent='Меряю отклик '+i+' из 4…';
-        var r=await load(JQ);
-        pings.push(r.ttfb>0?r.ttfb:r.ms);
+      // 1. Отклик, джиттер, потери
+      $('status').textContent='Меряю отклик…';
+      await pingOnce();
+      var rtts=[],lost=0,N=20;
+      for(var i=0;i<N;i++){
+        var v=await pingOnce();
+        if(v==null)lost++;else rtts.push(v);
+        $('status').textContent='Меряю отклик '+(i+1)+' из '+N+'…';
       }
-      pings.sort(function(a,b){return a-b});
-      var ping=(pings[1]+pings[2])/2,jit=pings[pings.length-1]-pings[0];
-      $('sPing').textContent=Math.round(ping)+' мс';
-      $('sJit').textContent='±'+Math.round(jit/2)+' мс';
+      if(rtts.length<3)throw new Error('no-server');
+      var lat=median(rtts),jit=0;
+      for(var k=1;k<rtts.length;k++)jit+=Math.abs(rtts[k]-rtts[k-1]);
+      jit=jit/(rtts.length-1);
+      var loss=lost/N*100;
+      $('sPing').textContent=Math.round(lat);
+      $('sJit').textContent=jit.toFixed(1);
+      $('sLoss').textContent=loss.toFixed(loss%1?1:0);
 
-      $('status').textContent='Меряю скорость…';
-      var t0=performance.now();
-      var rs=await Promise.all([load(TH),load(TH),load(TH)]);
-      var wall=(performance.now()-t0)/1000;
-      var bytes=rs.reduce(function(a,r){return a+r.bytes},0);
-      var speed=bytes>0?bytes*8/wall/1e6:null;
-      $('sSpeed').textContent=speed!=null?(speed>=10?Math.round(speed):speed.toFixed(1))+' Мбит/с':'—';
+      // 2. Скачивание
+      $('status').textContent='Меряю скорость скачивания…';
+      var first=await download(1e6);
+      var est=mbps([first],lat);
+      var per=Math.max(1e6,Math.min(25e6,est*1e6/8*5/4));
+      var ts=performance.now(),acc=0,parts;
+      var timer=setInterval(function(){
+        $('sDown').textContent=fmt(acc*8/Math.max(0.1,(performance.now()-ts-lat)/1000)/1e6);
+      },250);
+      try{
+        parts=await Promise.all([1,2,3,4].map(function(){return download(per,function(n){acc+=n})}));
+      }finally{clearInterval(timer)}
+      var down=mbps(parts,lat);
+      $('sDown').textContent=fmt(down);
 
-      var pS=clamp(100-(ping-30)/470*100);
-      var sS=speed!=null?clamp(Math.log10(Math.max(speed,0.5)/0.5)/Math.log10(40/0.5)*100):null;
-      var score=sS!=null?0.45*pS+0.55*sS:pS;
-      score=Math.round(clamp(score-Math.min(15,jit/15)));
+      // 3. Загрузка
+      var up=null;
+      try{
+        $('status').textContent='Меряю скорость загрузки…';
+        var u1=await upload(5e5);
+        var uest=mbps([u1],lat);
+        var uper=Math.max(5e5,Math.min(10e6,uest*1e6/8*4/3));
+        var uparts=await Promise.all([1,2,3].map(function(){return upload(uper)}));
+        up=mbps(uparts,lat);
+        $('sUp').textContent=fmt(up);
+      }catch(e){$('sUp').textContent='—'}
 
-      svg.parentNode.classList.remove('testing');
+      // 4. Оценка
+      var parts2=[
+        [0.30,clamp(Math.log10(Math.max(down,2)/2)/2*100)],
+        [0.15,up==null?null:clamp(Math.log10(Math.max(up,1))/Math.log10(50)*100)],
+        [0.30,clamp(100-(lat-20)/230*100)],
+        [0.15,clamp(100-jit/40*100)],
+        [0.10,clamp(100-loss/5*100)]
+      ];
+      var w=0,sum=0;
+      parts2.forEach(function(p){if(p[1]!=null){w+=p[0];sum+=p[0]*p[1]}});
+      var score=Math.round(sum/w);
+
+      gauge.classList.remove('testing');
       paint(score,Math.max(1,Math.ceil(score/20)));
       $('score').textContent=score;
-      $('verdict').textContent=verdictFor(score);
-      $('status').textContent='Готово. Результат относится к этому моменту.';
+      $('verdict').textContent=verdict(score);
+      $('status').textContent=advice(score);
+      btn.disabled=false;btn.textContent='Проверить ещё раз';
     }catch(e){
-      svg.parentNode.classList.remove('testing');
-      paint(0,0);
-      $('score').textContent='0';
-      $('verdict').textContent='Нет сигнала';
-      $('status').textContent='Не удалось связаться с проверочным сервером. Проверьте подключение и повторите.';
+      fail('Не удалось связаться с тестовым сервером. Проверьте подключение и повторите.');
     }
-    btn.disabled=false;btn.textContent='Проверить ещё раз';
   }
 
-  function finishOffline(){
+  function fail(msg){
+    gauge.classList.remove('testing');
     paint(0,0);
     $('score').textContent='0';
     $('verdict').textContent='Нет сигнала';
-    $('status').textContent='Устройство не подключено к сети. Включите Wi-Fi или мобильные данные.';
+    $('status').textContent=msg;
     btn.disabled=false;btn.textContent='Проверить ещё раз';
   }
 
