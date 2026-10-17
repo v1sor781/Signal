@@ -1,0 +1,225 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Сигнал</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Unbounded:wght@500;700&family=Onest:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+:root{
+  --bg:#EEF1F7; --fg:#101828; --muted:#5B6578; --line:#CFD6E4; --off:#D5DBE8;
+  --accent:#2447F5; --on-accent:#fff;
+  --ok:#0E9F7E; --mid:#C98100; --bad:#D4443B;
+  --display:'Unbounded','Arial Black',system-ui,sans-serif;
+  --body:'Onest',system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;
+  box-sizing:border-box;
+  padding-top:env(safe-area-inset-top,0px);
+  padding-bottom:env(safe-area-inset-bottom,0px);
+}
+@media (prefers-color-scheme:dark){
+  :root:not([data-theme="light"]){
+    --bg:#0D1324; --fg:#E8ECF8; --muted:#97A1BC; --line:#27304A; --off:#222B45;
+    --accent:#7D93FF; --on-accent:#0D1324;
+    --ok:#3DD6A7; --mid:#F0B64A; --bad:#FF7A70;
+  }
+}
+:root[data-theme="dark"]{
+  --bg:#0D1324; --fg:#E8ECF8; --muted:#97A1BC; --line:#27304A; --off:#222B45;
+  --accent:#7D93FF; --on-accent:#0D1324;
+  --ok:#3DD6A7; --mid:#F0B64A; --bad:#FF7A70;
+}
+*,*::before,*::after{box-sizing:inherit}
+html,body{margin:0}
+html{scroll-padding-top:env(safe-area-inset-top,0px)}
+body{background:var(--bg);color:var(--fg);font-family:var(--body);min-height:100vh;display:flex;justify-content:center;-webkit-font-smoothing:antialiased}
+main{width:100%;max-width:460px;padding:32px 22px 40px;display:flex;flex-direction:column;align-items:center}
+h1{font-family:var(--display);font-weight:700;font-size:clamp(34px,10vw,48px);letter-spacing:-.02em;margin:0;line-height:1}
+.sub{color:var(--muted);margin:10px 0 0;font-size:16px;text-align:center;line-height:1.45}
+
+.gauge{width:100%;max-width:360px;margin:30px 0 0}
+.gauge svg{display:block;width:100%;height:auto;overflow:visible}
+.arc{fill:none;stroke:var(--off);stroke-width:11;stroke-linecap:round;transition:stroke .45s ease}
+.arc.lit{stroke:var(--tone,var(--accent))}
+.dot{fill:var(--tone,var(--accent));transition:fill .45s ease}
+.testing .arc{animation:ping 1.2s ease-in-out infinite;stroke:var(--accent)}
+.testing .arc:nth-of-type(2){animation-delay:.12s}
+.testing .arc:nth-of-type(3){animation-delay:.24s}
+.testing .arc:nth-of-type(4){animation-delay:.36s}
+.testing .arc:nth-of-type(5){animation-delay:.48s}
+@keyframes ping{0%,100%{opacity:.25}40%{opacity:1}}
+
+.result{text-align:center;margin-top:6px;min-height:118px}
+.score{font-family:var(--display);font-weight:700;font-size:56px;line-height:1;color:var(--tone,var(--fg));transition:color .45s ease}
+.verdict{font-size:20px;font-weight:600;margin:10px 0 0}
+.status{color:var(--muted);margin:6px 0 0;font-size:15px;min-height:22px}
+
+button.go{margin-top:22px;font:600 17px/1 var(--body);background:var(--accent);color:var(--on-accent);border:0;border-radius:999px;padding:18px 34px;min-width:230px;cursor:pointer;transition:transform .12s ease,opacity .2s ease}
+button.go:active{transform:scale(.97)}
+button.go:disabled{opacity:.6;cursor:default}
+button.go:focus-visible{outline:3px solid var(--fg);outline-offset:3px}
+
+.stats{display:grid;grid-template-columns:repeat(3,1fr);width:100%;margin-top:34px;border-top:1px solid var(--line)}
+.stat{padding:16px 6px 0;text-align:center}
+.stat+.stat{border-left:1px solid var(--line)}
+.stat b{display:block;font-family:var(--display);font-weight:500;font-size:19px;letter-spacing:-.01em}
+.stat span{display:block;color:var(--muted);font-size:13px;margin-top:6px}
+.net{color:var(--muted);font-size:14px;margin:22px 0 0;text-align:center;min-height:20px}
+.note{color:var(--muted);font-size:13px;line-height:1.5;margin:14px 0 0;text-align:center;max-width:36ch}
+@media (prefers-reduced-motion:reduce){.testing .arc{animation:none;opacity:.7}.arc,.dot,.score{transition:none}}
+</style>
+</head>
+<body>
+<main>
+  <h1>Сигнал</h1>
+  <p class="sub">Проверьте, насколько хорошо работает ваш интернет прямо сейчас</p>
+
+  <div class="gauge" id="gauge" aria-hidden="true">
+    <svg viewBox="0 0 200 122" id="svg"></svg>
+  </div>
+
+  <div class="result" aria-live="polite">
+    <div class="score" id="score">—</div>
+    <p class="verdict" id="verdict">Нажмите кнопку, чтобы измерить</p>
+    <p class="status" id="status"></p>
+  </div>
+
+  <button class="go" id="go" type="button">Проверить сигнал</button>
+
+  <div class="stats">
+    <div class="stat"><b id="sPing">—</b><span>Отклик</span></div>
+    <div class="stat"><b id="sSpeed">—</b><span>Скорость</span></div>
+    <div class="stat"><b id="sJit">—</b><span>Стабильность</span></div>
+  </div>
+  <p class="net" id="net"></p>
+  <p class="note">Это быстрая оценка: измерение идёт через небольшие загрузки с публичного сервера, поэтому цифры приблизительные.</p>
+</main>
+
+<script>
+(function(){
+  var $=function(id){return document.getElementById(id)};
+  var svg=$('svg'),arcs=[];
+  var NS='http://www.w3.org/2000/svg',cx=100,cy=112,ang=56*Math.PI/180;
+  [22,42,62,82,102].forEach(function(r){
+    var p=document.createElementNS(NS,'path');
+    var dx=r*Math.sin(ang),dy=r*Math.cos(ang);
+    p.setAttribute('d','M'+(cx-dx).toFixed(1)+' '+(cy-dy).toFixed(1)+' A'+r+' '+r+' 0 0 1 '+(cx+dx).toFixed(1)+' '+(cy-dy).toFixed(1));
+    p.setAttribute('class','arc');
+    svg.appendChild(p);arcs.push(p);
+  });
+  var dot=document.createElementNS(NS,'circle');
+  dot.setAttribute('cx',cx);dot.setAttribute('cy',cy);dot.setAttribute('r',8);dot.setAttribute('class','dot');
+  svg.appendChild(dot);
+
+  var JQ='https://cdnjs.cloudflare.com/ajax/libs/jquery/3.7.1/jquery.min.js';
+  var TH='https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js';
+  var seq=0;
+
+  function load(url){
+    return new Promise(function(res,rej){
+      var u=url+'?s='+Date.now()+'_'+(seq++),s=document.createElement('script'),t0=performance.now();
+      var to=setTimeout(function(){s.remove();rej(new Error('timeout'))},15000);
+      s.onload=function(){
+        var t1=performance.now(),e=null;
+        clearTimeout(to);
+        try{var l=performance.getEntriesByName(u);e=l[l.length-1]||null}catch(_){}
+        s.remove();
+        res({
+          ms:t1-t0,
+          bytes:e?(e.encodedBodySize||e.transferSize||0):0,
+          ttfb:(e&&e.responseStart>0&&e.requestStart>0)?e.responseStart-e.requestStart:0
+        });
+      };
+      s.onerror=function(){clearTimeout(to);s.remove();rej(new Error('error'))};
+      s.src=u;document.head.appendChild(s);
+    });
+  }
+
+  function clamp(v){return Math.max(0,Math.min(100,v))}
+  function tone(score){return score>=65?'var(--ok)':score>=35?'var(--mid)':'var(--bad)'}
+  function verdictFor(score){
+    return score>=80?'Отличный сигнал':score>=60?'Хороший сигнал':score>=35?'Средний сигнал':'Слабый сигнал';
+  }
+  function paint(score,lit){
+    var t=score==null?'':tone(score);
+    $('gauge').style.setProperty('--tone',t||'var(--accent)');
+    $('score').style.setProperty('--tone',t||'var(--fg)');
+    arcs.forEach(function(a,i){a.classList.toggle('lit',i<lit)});
+  }
+  function reset(){
+    $('sPing').textContent='—';$('sSpeed').textContent='—';$('sJit').textContent='—';
+  }
+
+  var net=navigator.connection||navigator.mozConnection||navigator.webkitConnection;
+  if(net&&net.effectiveType){
+    $('net').textContent='Тип сети по данным браузера: '+net.effectiveType.toUpperCase();
+  }
+
+  var btn=$('go');
+  btn.addEventListener('click',run);
+
+  async function run(){
+    btn.disabled=true;
+    reset();paint(null,0);
+    $('score').textContent='…';
+    $('verdict').textContent='Измеряю';
+    if(navigator.onLine===false){
+      finishOffline();return;
+    }
+    svg.parentNode.classList.add('testing');
+    try{
+      $('status').textContent='Прогреваю соединение…';
+      await load(JQ);
+      var pings=[];
+      for(var i=1;i<=4;i++){
+        $('status').textContent='Меряю отклик '+i+' из 4…';
+        var r=await load(JQ);
+        pings.push(r.ttfb>0?r.ttfb:r.ms);
+      }
+      pings.sort(function(a,b){return a-b});
+      var ping=(pings[1]+pings[2])/2,jit=pings[pings.length-1]-pings[0];
+      $('sPing').textContent=Math.round(ping)+' мс';
+      $('sJit').textContent='±'+Math.round(jit/2)+' мс';
+
+      $('status').textContent='Меряю скорость…';
+      var t0=performance.now();
+      var rs=await Promise.all([load(TH),load(TH),load(TH)]);
+      var wall=(performance.now()-t0)/1000;
+      var bytes=rs.reduce(function(a,r){return a+r.bytes},0);
+      var speed=bytes>0?bytes*8/wall/1e6:null;
+      $('sSpeed').textContent=speed!=null?(speed>=10?Math.round(speed):speed.toFixed(1))+' Мбит/с':'—';
+
+      var pS=clamp(100-(ping-30)/470*100);
+      var sS=speed!=null?clamp(Math.log10(Math.max(speed,0.5)/0.5)/Math.log10(40/0.5)*100):null;
+      var score=sS!=null?0.45*pS+0.55*sS:pS;
+      score=Math.round(clamp(score-Math.min(15,jit/15)));
+
+      svg.parentNode.classList.remove('testing');
+      paint(score,Math.max(1,Math.ceil(score/20)));
+      $('score').textContent=score;
+      $('verdict').textContent=verdictFor(score);
+      $('status').textContent='Готово. Результат относится к этому моменту.';
+    }catch(e){
+      svg.parentNode.classList.remove('testing');
+      paint(0,0);
+      $('score').textContent='0';
+      $('verdict').textContent='Нет сигнала';
+      $('status').textContent='Не удалось связаться с проверочным сервером. Проверьте подключение и повторите.';
+    }
+    btn.disabled=false;btn.textContent='Проверить ещё раз';
+  }
+
+  function finishOffline(){
+    paint(0,0);
+    $('score').textContent='0';
+    $('verdict').textContent='Нет сигнала';
+    $('status').textContent='Устройство не подключено к сети. Включите Wi-Fi или мобильные данные.';
+    btn.disabled=false;btn.textContent='Проверить ещё раз';
+  }
+
+  paint(null,0);
+})();
+</script>
+</body>
+</html>
